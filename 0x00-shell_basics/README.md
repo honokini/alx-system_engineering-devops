@@ -1,1 +1,1 @@
-Shell basics command
+0x00. Shell, navigation
