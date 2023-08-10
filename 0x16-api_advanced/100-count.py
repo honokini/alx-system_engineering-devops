@@ -1,54 +1,46 @@
 #!/usr/bin/python3
-""" raddit api"""
+"""Get frequency of keywords in posts in a Subreddit"""
 
+
+import collections
+import io
 import json
 import requests
+import urllib.parse
 
 
-def count_words(subreddit, word_list, after="", count=[]):
-    """count all words"""
+def count_words(subreddit, word_list, hot_list=[], after=None):
+    """Get frequency of keywords in posts in a Subreddit"""
 
-    if after == "":
-        count = [0] * len(word_list)
-
-    url = "https://www.reddit.com/r/{}/hot.json".format(subreddit)
-    request = requests.get(url,
-                           params={'after': after},
-                           allow_redirects=False,
-                           headers={'user-agent': 'bhalut'})
-
-    if request.status_code == 200:
-        data = request.json()
-
-        for topic in (data['data']['children']):
-            for word in topic['data']['title'].split():
-                for i in range(len(word_list)):
-                    if word_list[i].lower() == word.lower():
-                        count[i] += 1
-
-        after = data['data']['after']
-        if after is None:
-            save = []
-            for i in range(len(word_list)):
-                for j in range(i + 1, len(word_list)):
-                    if word_list[i].lower() == word_list[j].lower():
-                        save.append(j)
-                        count[i] += count[j]
-
-            for i in range(len(word_list)):
-                for j in range(i, len(word_list)):
-                    if (count[j] > count[i] or
-                            (word_list[i] > word_list[j] and
-                             count[j] == count[i])):
-                        aux = count[i]
-                        count[i] = count[j]
-                        count[j] = aux
-                        aux = word_list[i]
-                        word_list[i] = word_list[j]
-                        word_list[j] = aux
-
-            for i in range(len(word_list)):
-                if (count[i] > 0) and i not in save:
-                    print("{}: {}".format(word_list[i].lower(), count[i]))
-        else:
-            count_words(subreddit, word_list, after, count)
+    path = 'https://www.reddit.com'
+    path += '/r/' + urllib.parse.quote(subreddit, safe='') + '/hot.json'
+    path += '?raw_json=1'
+    if after is not None:
+        path += '&after=' + urllib.parse.quote_plus(after)
+        path += '&count=' + str(len(hot_list))
+    headers = {
+        'Connection': 'keep-alive',
+        'User-Agent': 'python:hbtn701t3:1 (by /u/SamHermesBoots)'
+    }
+    response = requests.get(path, headers=headers, allow_redirects=False)
+    if response.status_code != 200:
+        return
+    posts = response.json()
+    hot_list.extend(p['data']['title'] for p in posts['data']['children'])
+    after = posts['data']['after']
+    if after is None:
+        word_list = collections.Counter(word_list)
+        counter = collections.Counter(
+            word
+            for title in hot_list for word in title.lower().split()
+        )
+        print('\n'.join(
+            '{}: {}'.format(word, count)
+            for word, count in sorted((
+                (word, counter[word.lower()] * words)
+                for word, words in word_list.items()
+                if counter[word.lower()] > 0
+            ), key=lambda pair: (-pair[1], pair[0]))
+        ))
+        return
+    return count_words(subreddit, word_list, hot_list, after)
